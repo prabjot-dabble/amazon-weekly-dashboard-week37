@@ -19,6 +19,7 @@ body{margin:0;font-family:var(--font-sans);color:var(--ink);background:var(--sur
 h1,h2,h3,h4{font-family:var(--font-body);margin:0;color:var(--ink);}
 .mono{font-family:var(--font-mono);}
 a{color:inherit;}
+.axis-label{font-size:10.5px;font-family:var(--font-sans);fill:var(--ink-faint);}
 
 /* ---------- Topbar ---------- */
 .topbar{background:var(--navy);color:#fff;padding:16px 26px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:50;}
@@ -321,8 +322,10 @@ function svgEl(tag, attrs){
   for(const k in attrs){ el.setAttribute(k, attrs[k]); }
   return el;
 }
-function makeSvg(w, h, viewbox){
-  const svg = svgEl('svg', {width:'100%', height:h, viewBox: viewbox || ('0 0 '+w+' '+h), preserveAspectRatio:'xMinYMid meet'});
+function makeSvg(w, h, viewbox, autoHeight){
+  const attrs = {width:'100%', viewBox: viewbox || ('0 0 '+w+' '+h), preserveAspectRatio:'xMinYMid meet'};
+  if(autoHeight){ attrs.style = 'height:auto;display:block;'; } else { attrs.height = h; }
+  const svg = svgEl('svg', attrs);
   return svg;
 }
 
@@ -445,50 +448,80 @@ function lineChart(container, opts){
 
 // ---- Funnel chart (single funnel, sequential stages, supports a "non-literal" break) ----
 function funnelChart(container, opts){
-  const W = opts.width || 640;
-  const rowH = opts.rowH || 54;
-  const gap = opts.gap !== undefined ? opts.gap : 10;
+  const W = opts.width || 860;
+  const rowH = opts.rowH || 50;
+  const gap = opts.gap !== undefined ? opts.gap : 15;
   const stages = opts.stages;
-  let H = 0;
-  stages.forEach(s => { H += rowH + gap + (s.breakBefore ? 26 : 0); });
+  const barFrac = opts.barFrac || 0.38;
+  const topPad = 10;
+  let H = topPad + 8;
+  stages.forEach(s => { H += rowH + gap + (s.breakBefore ? 30 : 0); });
   const maxVal = Math.max(...stages.map(s=>s.value||0), 1);
-  const svg = makeSvg(W, H);
+  const svg = makeSvg(W, H, null, true);
   const cx = W/2;
-  const maxBarW = W * 0.82;
+  const maxBarW = W * barFrac;
+  const sideMargin = 18;
 
-  let y = 0;
+  // Splits a step annotation like "Cart Add Rate 8.6% (of Page Views)" into a
+  // primary line and an optional lighter-weight parenthetical second line, so
+  // long labels wrap cleanly instead of running off the edge of the chart.
+  function splitAnnotation(full){
+    const m = full.match(/^(.*?)\s*(\(.*\))\s*$/);
+    return m ? {main: m[1].trim(), sub: m[2]} : {main: full, sub: null};
+  }
+
+  let prevSource = null;
+  let y = topPad;
   stages.forEach((st, i)=>{
     if(st.breakBefore){
-      const by = y + 13;
-      svg.appendChild(svgEl('line', {x1:20, x2:W-20, y1:by, y2:by, stroke:'#C9CDD6', 'stroke-dasharray':'4,4'}));
-      const bt = svgEl('text', {x:cx, y:by-6, 'text-anchor':'middle', class:'axis-label', style:'font-weight:600;'});
+      const by = y + 14;
+      svg.appendChild(svgEl('line', {x1:sideMargin, x2:W-sideMargin, y1:by, y2:by, stroke:'#C9CDD6', 'stroke-dasharray':'4,4'}));
+      const bt = svgEl('text', {x:cx, y:by-7, 'text-anchor':'middle', class:'axis-label', style:'font-weight:700;'});
       bt.textContent = st.breakBefore;
       svg.appendChild(bt);
-      y += 26;
+      y += 30;
+      prevSource = null;
     }
     const frac = (st.value||0)/maxVal;
-    const barW = Math.max(maxBarW * frac, 30);
+    const barW = Math.max(maxBarW * frac, 70);
     const x = cx - barW/2;
+    const rowMid = y + rowH/2;
     const color = st.color || opts.color || PALETTE[0];
-    const rect = svgEl('rect', {x:x, y:y, width:barW, height:rowH, rx:6, fill:color, opacity: Math.max(0.5, 0.95 - i*0.06)});
+    const rect = svgEl('rect', {x:x, y:y, width:barW, height:rowH, rx:7, fill:color, opacity: Math.max(0.5, 0.95 - i*0.06)});
     svg.appendChild(rect);
-    const lbl = svgEl('text', {x:cx, y:y+rowH/2-4, 'text-anchor':'middle', fill:'#fff', style:'font-weight:700; font-size:12.5px; font-family:var(--font-body)'});
+    const lbl = svgEl('text', {x:cx, y:rowMid-4, 'text-anchor':'middle', fill:'#fff', style:'font-weight:700; font-size:12.5px; font-family:var(--font-body)'});
     lbl.textContent = st.label;
     svg.appendChild(lbl);
-    const val = svgEl('text', {x:cx, y:y+rowH/2+14, 'text-anchor':'middle', fill:'#fff', style:'font-size:11px; font-family:var(--font-mono)'});
+    const val = svgEl('text', {x:cx, y:rowMid+14, 'text-anchor':'middle', fill:'#fff', style:'font-size:11px; font-family:var(--font-mono)'});
     val.textContent = fmtNum(st.value,0) + (st.sub ? '   ·   '+st.sub : '');
     svg.appendChild(val);
-    if(st.source){
-      const srcT = svgEl('text', {x:cx, y:y-3, 'text-anchor':'middle', class:'axis-label'});
+
+    // Source tag sits in the left margin, vertically centered on its row, and
+    // is only repeated when the source actually changes from the row above —
+    // avoids the same tag stacking up next to every row that shares a source.
+    if(st.source && st.source !== prevSource){
+      const srcT = svgEl('text', {x:sideMargin, y:rowMid+3, 'text-anchor':'start', class:'axis-label', style:'font-style:italic;'});
       srcT.textContent = st.source;
       svg.appendChild(srcT);
+      prevSource = st.source;
     }
+
+    // Step annotation sits in the right margin; a parenthetical qualifier
+    // wraps to its own (lighter) second line instead of running past the edge.
     if(i>0 && !st.breakBefore){
       const prevVal = stages[i-1].value || 1;
       const dropPct = prevVal ? ((prevVal-st.value)/prevVal*100) : 0;
-      const stepLbl = svgEl('text', {x:cx+maxBarW/2+14, y:y+rowH/2+4, 'text-anchor':'start', class:'axis-label'});
-      stepLbl.textContent = st.stepLabel || ((dropPct>=0?'-':'+')+fmtNum(Math.abs(dropPct),0)+'%');
+      const full = st.stepLabel || ((dropPct>=0?'-':'+')+fmtNum(Math.abs(dropPct),0)+'%');
+      const {main, sub} = splitAnnotation(full);
+      const stepX = cx + maxBarW/2 + 20;
+      const stepLbl = svgEl('text', {x:stepX, y: sub ? rowMid-1 : rowMid+4, 'text-anchor':'start', class:'axis-label', style:'font-weight:700;'});
+      stepLbl.textContent = main;
       svg.appendChild(stepLbl);
+      if(sub){
+        const stepLbl2 = svgEl('text', {x:stepX, y:rowMid+12, 'text-anchor':'start', class:'axis-label'});
+        stepLbl2.textContent = sub;
+        svg.appendChild(stepLbl2);
+      }
     }
     y += rowH + gap;
   });
@@ -3105,5 +3138,5 @@ function renderAction(container){
 </script>
 </body>
 </html>
-dabble_Amazon_Growth_Control_Tower (3).html
-Displaying dabble_Amazon_Growth_Control_Tower (3).html.
+dabble_Amazon_Growth_Control_Tower (4).html
+Displaying dabble_Amazon_Growth_Control_Tower (4).html.
