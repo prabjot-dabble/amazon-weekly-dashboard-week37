@@ -1758,28 +1758,33 @@ function renderTarget(container){
   const bkC = STORE.business_kpis[cur];
   const gmC = STORE.account_gm ? STORE.account_gm[cur] : null;
   const cacC = getAsinCacSummary(cur);
+  const noTargetData = !tC || !tC.days;
 
   let html = pageHead('Target vs Actual', 'Source: Target Vs Acv (daily Plan/Actual for GMV and Ad Spend), rolled up to '+periodType()+' here and to calendar month further below. Orders/Units/ROAS/ACOS/Conversion/CAC targets are editable in Settings since the workbook does not define them directly.');
 
+  if(noTargetData){
+    html += naBanner('No Target Vs Actual data yet for '+cur, 'The Target Vs Acv sheet in the uploaded workbook has no daily Plan/Actual rows for '+cur+' yet, so GMV and Ad Spend Plan/Actual/Achievement% below are shown as — (not 0 — this is missing data, not a shortfall). Orders, Units, Conversion%, Gross Margin% and CAC further down still reflect real '+cur+' actuals from the Business Report and COGS mapping. This section fills in automatically once an export with '+cur+'\'s daily Target rows is uploaded.');
+  }
+
   html += '<div class="kpi-grid" style="margin-bottom:8px;">';
-  html += tvaCard('GMV — Plan', tC.gmv_plan, tP.gmv_plan, v=>fmtCur(v));
-  html += tvaCard('GMV — Actual', tC.gmv_act, tP.gmv_act, v=>fmtCur(v));
-  html += tvaAchievementCard('GMV Achievement', tC.gmv_achievement_pct, tP.gmv_achievement_pct);
-  html += tvaCard('GMV Gap (Act − Plan)', tC.gmv_gap, tP.gmv_gap, v=>fmtCur(v), true);
+  html += noTargetData ? tvaNaCard('GMV — Plan') : tvaCard('GMV — Plan', tC.gmv_plan, tP.gmv_plan, v=>fmtCur(v));
+  html += noTargetData ? tvaNaCard('GMV — Actual') : tvaCard('GMV — Actual', tC.gmv_act, tP.gmv_act, v=>fmtCur(v));
+  html += noTargetData ? tvaNaCard('GMV Achievement') : tvaAchievementCard('GMV Achievement', tC.gmv_achievement_pct, tP.gmv_achievement_pct);
+  html += noTargetData ? tvaNaCard('GMV Gap (Act − Plan)') : tvaCard('GMV Gap (Act − Plan)', tC.gmv_gap, tP.gmv_gap, v=>fmtCur(v), true);
   html += '</div>';
   html += '<div class="kpi-grid" style="margin-top:2px;">';
-  html += tvaCard('Ad Spend — Plan', tC.spend_plan, tP.spend_plan, v=>fmtCur(v));
-  html += tvaCard('Ad Spend — Actual', tC.spend_act, tP.spend_act, v=>fmtCur(v));
-  html += tvaAchievementCard('Spend Achievement', tC.spend_achievement_pct, tP.spend_achievement_pct);
-  html += tvaCard('Spend Gap (Act − Plan)', tC.spend_gap, tP.spend_gap, v=>fmtCur(v), true);
+  html += noTargetData ? tvaNaCard('Ad Spend — Plan') : tvaCard('Ad Spend — Plan', tC.spend_plan, tP.spend_plan, v=>fmtCur(v));
+  html += noTargetData ? tvaNaCard('Ad Spend — Actual') : tvaCard('Ad Spend — Actual', tC.spend_act, tP.spend_act, v=>fmtCur(v));
+  html += noTargetData ? tvaNaCard('Spend Achievement') : tvaAchievementCard('Spend Achievement', tC.spend_achievement_pct, tP.spend_achievement_pct);
+  html += noTargetData ? tvaNaCard('Spend Gap (Act − Plan)') : tvaCard('Spend Gap (Act − Plan)', tC.spend_gap, tP.spend_gap, v=>fmtCur(v), true);
   html += '</div>';
 
   html += '<div class="section"><div class="section-head"><h3>Target vs Actual — full table</h3><span class="tag">'+cur+'</span></div>';
   html += '<div class="section-note">Orders, Units, ROAS, ACOS, Conversion%, GM% and CAC rows use the editable targets from Settings (⚙ top right) where the workbook itself has no target for that metric.</div>';
   const s = SETTINGS;
   const rows = [
-    {metric:'Sales (GMV)', target:tC.gmv_plan, actual:tC.gmv_act, fmt:'currency'},
-    {metric:'Ad Spend', target:tC.spend_plan, actual:tC.spend_act, fmt:'currency'},
+    {metric:'Sales (GMV)', target: noTargetData ? null : tC.gmv_plan, actual: noTargetData ? null : tC.gmv_act, fmt:'currency'},
+    {metric:'Ad Spend', target: noTargetData ? null : tC.spend_plan, actual: noTargetData ? null : tC.spend_act, fmt:'currency'},
     {metric:'Orders', target:s.target_orders, actual:bkC.orders, fmt:'num'},
     {metric:'Units', target:s.target_units, actual:bkC.units, fmt:'num'},
     {metric:'Conversion %', target:s.target_conv, actual:bkC.unit_session_pct, fmt:'pct'},
@@ -1790,10 +1795,10 @@ function renderTarget(container){
     if(ak){ rows.push({metric:'ROAS', target:s.target_roas, actual:ak.roas, fmt:'ratio'});
       rows.push({metric:'ACOS %', target:s.target_acos, actual:ak.acos, fmt:'pct', invert:true}); }
   }
-  if(cacC.actual_cac!=null) rows.push({metric:'CAC (Spend \u00f7 Orders)', target:cacC.target_cac, actual:cacC.actual_cac, fmt:'currency', invert:true});
+  if(cacC.actual_cac!=null) rows.push({metric:'CAC (Spend ÷ Orders)', target:cacC.target_cac, actual:cacC.actual_cac, fmt:'currency', invert:true});
   html += '<div class="table-wrap"><table id="tvaFullTable"><thead><tr><th>Metric</th><th class="num">Target</th><th class="num">Actual</th><th class="num">Variance</th><th class="num">Achievement %</th><th>Status</th></tr></thead><tbody>';
   rows.forEach(r=>{
-    if(r.target==null){ html += '<tr><td>'+esc(r.metric)+'</td><td class="num">— <span style="font-size:10px;color:var(--ink-faint);">(set in Settings)</span></td><td class="num">'+fmtValByType(r.actual,r.fmt)+'</td><td class="num">—</td><td class="num">—</td><td>—</td></tr>'; return; }
+    if(r.target==null){ html += '<tr><td>'+esc(r.metric)+'</td><td class="num">— <span style="font-size:10px;color:var(--ink-faint);">'+(noTargetData?'(no target data)':'(set in Settings)')+'</span></td><td class="num">'+(r.actual==null?'—':fmtValByType(r.actual,r.fmt))+'</td><td class="num">—</td><td class="num">—</td><td>—</td></tr>'; return; }
     const variance = r.actual - r.target;
     const ach = r.target ? r.actual/r.target*100 : null;
     html += '<tr><td style="font-weight:600;">'+esc(r.metric)+'</td>'
@@ -1807,7 +1812,7 @@ function renderTarget(container){
   html += '<div class="grid-2">'
     + '<div class="panel"><h4>GMV: Plan vs Actual</h4><div class="chart-box" id="tvaGmvChart"></div></div>'
     + '<div class="panel"><h4>Ad Spend: Plan vs Actual</h4><div class="chart-box" id="tvaSpendChart"></div></div></div>';
-  html += '<div class="panel" style="margin-top:20px;"><h4>Achievement % trend</h4><div class="panel-sub">100% = on-plan.</div><div class="chart-box" id="tvaAchTrend"></div></div></div>';
+  html += '<div class="panel" style="margin-top:20px;"><h4>Achievement % trend</h4><div class="panel-sub">100% = on-plan. Periods with no Target data yet are left as gaps, not plotted at 0%.</div><div class="chart-box" id="tvaAchTrend"></div></div></div>';
 
   html += '<div class="section"><div class="section-head"><h3>Timeline: Monthly rollup</h3><span class="tag">Calendar month, from daily Target rows</span></div>';
   html += '<div class="section-note">Business Reports and Search data in this workbook are tracked by week only (a week can span two calendar months), so only Target vs Actual supports a true monthly view here — computed from the underlying daily rows, not by averaging weeks.</div>';
@@ -1832,11 +1837,17 @@ function renderTarget(container){
     showValues:true, valueFmt:v=>fmtNum(v/1000,0)+'k', axisFmt:v=>fmtNum(v/1000,0)+'k'});
   legendFor('tvaSpendChart', ['Plan','Actual'], [PALETTE[4],PALETTE[3]]);
 
-  const gmvAch = PERIODS().map(p=>STORE.target_kpis[p].gmv_achievement_pct), spendAch = PERIODS().map(p=>STORE.target_kpis[p].spend_achievement_pct);
+  const gmvAch = PERIODS().map(p=>STORE.target_kpis[p].days ? STORE.target_kpis[p].gmv_achievement_pct : null),
+        spendAch = PERIODS().map(p=>STORE.target_kpis[p].days ? STORE.target_kpis[p].spend_achievement_pct : null);
   lineChart(document.getElementById('tvaAchTrend'), {categories:PERIODS(),
     series:[{name:'GMV Achievement %',color:PALETTE[0],values:gmvAch},{name:'Spend Achievement %',color:PALETTE[3],values:spendAch}],
     showValues:true, height:230, valueFmt:v=>fmtNum(v,1)+'%', axisFmt:v=>Math.round(v)+'%'});
   legendFor('tvaAchTrend', ['GMV Achievement %','Spend Achievement %'], [PALETTE[0],PALETTE[3]]);
+}
+
+function tvaNaCard(label){
+  return '<div class="kpi"><div class="lbl">'+esc(label)+'</div><div class="val" style="color:var(--ink-faint);">—</div>'
+    + '<div class="cmp">No target data for this period yet</div></div>';
 }
 
 function tvaCard(label, curVal, prevVal, fmtFn, isGap){
@@ -3095,4 +3106,4 @@ function renderAction(container){
 </body>
 </html>
 dabble_Amazon_Growth_Control_Tower (2).html
-Displaying dabble_Amazon_Growth_Control_Tower (2).html.in:sent mom. Press Tab to insert.
+Displaying dabble_Amazon_Growth_Control_Tower (2).html.
